@@ -1,0 +1,20 @@
+{
+  "name": "jev-reflection",
+  "interface": {
+    "displayName": "Jev Reflection"
+  },
+  "plugins": [
+    {
+      "name": "jev-reflection",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

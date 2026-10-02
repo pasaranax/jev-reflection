@@ -1,0 +1,23 @@
+{
+  "name": "jev-reflection",
+  "version": "0.1.2",
+  "description": "Uses TypeSafe Jev to trigger focused course and wait-justification reflection.",
+  "author": {
+    "name": "pasaranax"
+  },
+  "interface": {
+    "displayName": "Jev Reflection",
+    "shortDescription": "Jev-triggered reflection for agent tasks",
+    "longDescription": "Every five minutes during an active tool-using turn, TypeSafe Jev checks whether the work is drifting, overengineered, looping, or waiting past its evidence-backed expectation. A strong signal makes the agent visibly reflect on the named concern before continuing.",
+    "developerName": "pasaranax",
+    "category": "Productivity",
+    "capabilities": [
+      "Course correction",
+      "Overengineering detection",
+      "Wait justification",
+      "Lifecycle hooks"
+    ],
+    "defaultPrompt": "Explain when Jev Reflection intervenes and what the agent must reflect on."
+  },
+  "mcpServers": "./.mcp.json"
+}

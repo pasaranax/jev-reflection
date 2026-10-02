@@ -1,0 +1,19 @@
+{
+  "name": "jev-reflection",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "description": "Dependency-free TypeSafe Jev reflection hook for Codex tasks.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/config.mjs && node --check src/guard.mjs && node --check src/server.mjs && node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pasaranax/jev-reflection.git"
+  }
+}
