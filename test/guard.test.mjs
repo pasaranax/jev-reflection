@@ -6,10 +6,8 @@ import test from "node:test";
 import { evaluateWithJev, INTERVAL_MS, JevGuard } from "../src/guard.mjs";
 
 const lowScores = {
-  scope_drift: 0.1,
-  overengineering: 0.2,
-  unproductive_loop: 0.15,
-  wait_reassessment_needed: 0.1,
+  focus: 0.1, cause: 0.1, probe: 0.1, pace: 0.1, perspective: 0.1, reviewableWork: false,
+  optionId: "none", evidenceId: "none",
 };
 
 test("does not call Jev before the five-minute boundary", async () => {
@@ -27,7 +25,7 @@ test("does not call Jev before the five-minute boundary", async () => {
   now = INTERVAL_MS - 1;
   const output = await toolEnd(guard);
 
-  assert.deepEqual(output, {});
+  assert.equal(output.systemMessage, undefined);
   assert.equal(calls, 0);
 });
 
@@ -44,9 +42,9 @@ test("checks once per interval and stays quiet below the threshold", async () =>
 
   await startTurn(guard);
   now = INTERVAL_MS;
-  assert.deepEqual(await toolEnd(guard), {});
+  assert.equal((await toolEnd(guard)).systemMessage, undefined);
   now += 1_000;
-  assert.deepEqual(await toolEnd(guard), {});
+  assert.equal((await toolEnd(guard)).systemMessage, undefined);
   assert.equal(calls, 1);
 });
 
@@ -230,23 +228,49 @@ test("gives Jev recent timestamped user and assistant messages from the transcri
   ]);
 });
 
+test("includes bounded attributed subagent reports without promoting them to user directives", async () => {
+  let now = 0, captured;
+  const guard = new JevGuard({ now: () => now, evaluate: async (state) => { captured = state; return lowScores; } });
+  const directory = await mkdtemp(path.join(os.tmpdir(), "jev-review-transcript-"));
+  const transcriptPath = path.join(directory, "rollout.jsonl");
+  const record = (payload) => JSON.stringify({ timestamp: "2026-10-07T12:00:00Z", type: "response_item", payload });
+  await writeFile(transcriptPath, [
+    ...Array.from({ length: 18 }, (_, i) => record({ type: "message", role: "assistant", content: [{ type: "output_text", text: `Earlier status ${i}` }] })),
+    record({ type: "agent_message", author: "/root/reviewer", recipient: "/root", content: [{ type: "input_text", text: "Reviewed auth only. TYPESAFE_API_KEY=secret-review-key\n" + "x".repeat(3000) + "\nNot reviewed: data migration." }] }),
+    record({ type: "reasoning", content: [{ type: "input_text", text: "PRIVATE_REASONING" }] }),
+    record({ type: "message", role: "developer", content: [{ type: "input_text", text: "HIDDEN_INSTRUCTION" }] }),
+  ].join("\n"));
+  await startTurn(guard);
+  now = INTERVAL_MS;
+  await toolEnd(guard, { transcriptPath });
+  assert.equal(captured.conversation_timeline.length, 16);
+  const report = captured.conversation_timeline.at(-1);
+  assert.equal(report.role, "agent");
+  assert.equal(report.author, "/root/reviewer");
+  assert.match(report.text, /Reviewed auth only/);
+  assert.match(report.text, /Not reviewed: data migration/);
+  assert.match(report.text, /middle truncated/);
+  assert.ok(report.text.length < 2100);
+  assert.doesNotMatch(JSON.stringify(captured), /secret-review-key|PRIVATE_REASONING|HIDDEN_INSTRUCTION/);
+});
+
 test("requires a visible reflection when Jev crosses the threshold", async () => {
   let now = 0;
   const guard = new JevGuard({
     now: () => now,
-    evaluate: async () => ({ ...lowScores, overengineering: 0.91 }),
+    evaluate: async () => ({ ...lowScores, focus: 0.91 }),
   });
 
   await startTurn(guard);
   now = INTERVAL_MS;
   const output = await toolEnd(guard);
 
-  assert.match(output.systemMessage, /overengineering 91%/);
+  assert.match(output.systemMessage, /Is my \*\*focus\*\* still on the goal\?/);
   assert.equal(output.hookSpecificOutput.hookEventName, "PostToolUse");
   assert.match(output.hookSpecificOutput.additionalContext, /Before any further tool call/);
   assert.match(
     output.hookSpecificOutput.additionalContext,
-    /titled exactly ‘🧭 Jev reflection — course’/,
+    /titled exactly ‘🎯 \*\*Jev reflection\*\* — Is my \*\*focus\*\* still on the goal\?’/,
   );
   assert.match(output.hookSpecificOutput.additionalContext, /false positive/);
 });
@@ -257,7 +281,7 @@ test("requires a wait-justification reflection when continued waiting needs reas
     now: () => now,
     evaluate: async () => ({
       ...lowScores,
-      wait_reassessment_needed: 0.91,
+      pace: 0.91,
     }),
   });
 
@@ -265,10 +289,10 @@ test("requires a wait-justification reflection when continued waiting needs reas
   now = INTERVAL_MS;
   const output = await toolEnd(guard);
 
-  assert.match(output.systemMessage, /wait justification/);
+  assert.match(output.systemMessage, /Is my \*\*pace\*\* appropriate for this task\?/);
   assert.match(
     output.hookSpecificOutput.additionalContext,
-    /titled exactly ‘🧭 Jev reflection — wait justification’/,
+    /titled exactly ‘⏱️ \*\*Jev reflection\*\* — Is my \*\*pace\*\* appropriate for this task\?’/,
   );
   assert.match(output.hookSpecificOutput.additionalContext, /Do not cancel/i);
   assert.match(output.hookSpecificOutput.additionalContext, /fresh independent evidence/i);
@@ -308,6 +332,7 @@ test("redacts obvious secrets before sending state to Jev", async () => {
     toolResponse: "OPENAI_API_KEY=also-secret",
   });
 
+  await guard.turns.get("session:turn").pending;
   const serialized = JSON.stringify(capturedState);
   assert.doesNotMatch(serialized, /super-secret-value|abc\.def|also-secret/);
   assert.match(serialized, /\[redacted\]/);
@@ -333,6 +358,7 @@ test("redacts camelCase fields and quoted secrets in text before evaluation", as
     },
     toolResponse: `Authorization: Basic ${basicAuth}\nCookie: session=fake-cookie\nDATABASE_URL="postgres://fake-user:fake-pass@localhost/db"`,
   });
+  await guard.turns.get("session:turn").pending;
   const serialized = JSON.stringify(capturedState);
   for (const secret of ["fake multi word secret", "fake-camel-key", "fake-access-token", "fake-client-secret", "fake-session-cookie", "fake-json-key", "fake json password", basicAuth, "fake-cookie", "fake-pass", "fake-cli-password"]) {
     assert.equal(serialized.includes(secret), false, `Leaked fixture: ${secret}`);
@@ -344,7 +370,8 @@ test("keeps the TypeSafe credential out of the HTTP body and rejects redirects",
   let request;
   t.mock.method(globalThis, "fetch", async (url, options) => {
     request = { url, ...options };
-    return new Response(JSON.stringify({ answers: Object.fromEntries(Object.entries(lowScores).map(([key, noul]) => [key, { noul }])) }));
+    const questions = JSON.parse(options.body).questions;
+    return new Response(JSON.stringify({ answers: Object.fromEntries(Object.entries(questions).map(([key, question]) => [key, question.type === "noul" ? { noul: lowScores[key] ?? 0.1 } : { choice: "none" }])) }));
   });
   const scores = await evaluateWithJev({ prompt: `An unlabelled credential: ${apiKey}`, nested: { output: apiKey } }, { apiKey });
   assert.deepEqual(scores, lowScores);
@@ -366,12 +393,12 @@ test("does not expose exception text in hook diagnostics", async () => {
 test("rejects null and out-of-range probabilities", async () => {
   for (const probability of [null, -0.1, 1.1, "0.9"]) {
     let now = 0;
-    const guard = new JevGuard({ now: () => now, evaluate: async () => ({ ...lowScores, scope_drift: probability }) });
+    const guard = new JevGuard({ now: () => now, evaluate: async () => ({ ...lowScores, focus: probability }) });
     await startTurn(guard);
     now = INTERVAL_MS;
     const output = await toolEnd(guard);
     assert.match(output.systemMessage, /invalid response/);
-    assert.equal(output.hookSpecificOutput, undefined);
+    assert.doesNotMatch(output.hookSpecificOutput?.additionalContext ?? "", /Before any further tool call/);
   }
 });
 
@@ -391,7 +418,7 @@ async function toolEnd(
   guard,
   { turnId = "turn", toolName = "Bash", transcriptPath } = {},
 ) {
-  return guard.handle({
+  const event = {
     event: "tool_end",
     sessionId: "session",
     turnId,
@@ -400,5 +427,12 @@ async function toolEnd(
     toolInput: { command: "npm test" },
     toolResponse: { exitCode: 0, output: "ok" },
     transcriptPath,
-  });
+  };
+  const output = await guard.handle(event);
+  const pending = guard.turns.get(`session:${turnId}`).pending;
+  if (pending) {
+    await pending;
+    return guard.handle(event);
+  }
+  return output;
 }

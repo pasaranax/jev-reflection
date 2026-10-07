@@ -1,5 +1,5 @@
 {
-  "description": "Ask TypeSafe Jev to challenge Codex work and waiting decisions and trigger typed visible reflection.",
+  "description": "Help the agent reflect during work on focus, causes versus symptoms, early probes, pace and fresh perspectives on intermediate results.",
   "hooks": {
     "UserPromptSubmit": [
       {

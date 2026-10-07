@@ -1,6 +1,6 @@
 {
   "name": "jev-reflection",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Dependency-free TypeSafe Jev reflection hook for Codex tasks.",
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/config.mjs && node --check src/guard.mjs && node --check src/server.mjs && node --test"
+    "check": "node --check src/config.mjs && node --check src/navigator.mjs && node --check src/perspective.mjs && node --check src/guard.mjs && node --check src/server.mjs && node --test"
   },
   "repository": {
     "type": "git",

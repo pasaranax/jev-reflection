@@ -1,44 +1,23 @@
 # Jev Reflection
 
-A local Codex plugin that uses [TypeSafe Jev](https://typesafe.ai) to check for scope drift, overengineering, unproductive loops, and unjustified waiting. During active work it checks on the first tool completion after each five-minute boundary. A signal of 80% or higher asks Codex to visibly reflect; lower scores stay silent.
+A Codex plugin that uses hooks to send working context to [TypeSafe Jev](https://typesafe.ai) every five minutes during active work. It catches costly detours while the agent is working, before they turn into wasted time or rework after review.
 
-## Install in Codex
+Checks run in the background. When Jev raises a concern, the agent briefly reflects and decides what to do. Quiet checks do not interrupt the agent.
 
-Requirements: a current Codex CLI with `codex plugin`, Node.js 18+ available as `node`, and your own TypeSafe API key.
+| Feature | Problem | How it helps |
+| --- | --- | --- |
+| 🎯 `focus` | The agent is overengineering or doing unrequested work. | Flags unnecessary additions against the task's scope. |
+| 🔍 `cause` | The agent is fixing a symptom while leaving its cause active. | Questions whether the fix addresses the cause across relevant scenarios. |
+| 🧪 `probe` | The agent is investing in an untested assumption. | Suggests checking the prerequisite before building on it. |
+| ⏱️ `pace` | The agent is waiting or repeating work without useful progress. | Prompts reassessment using elapsed time, costs and observed results. |
+| 👀 `perspective` | The agent may be overlooking something consequential. | Requests a read-only supervisor with fresh context to inspect work in progress. |
+| Progress HUD | Progress or a drop in completion is unclear. | Estimates completion every 15 minutes and notes scope growth or revised estimates. |
+| Checkpoints | Jev cannot infer every plan or uncertainty from tools. | Provides two-way communication: the agent submits plans and options through `jev_checkpoint`, receives feedback and reports its decision. |
 
-```sh
-codex plugin marketplace add pasaranax/jev-reflection
-codex plugin add jev-reflection@jev-reflection
-```
+`●●●●○○○○○○ — ~40% of the plan completed. Scope expanded (+2 plan items).`
 
-In your Codex configuration (`~/.codex/config.toml`, or `$CODEX_HOME/config.toml` if customized), add your key to the existing section or create it:
+## Install
 
-```toml
-[shell_environment_policy.set]
-TYPESAFE_API_KEY = "your-typesafe-key"
-```
+Requires Node.js 18+, Codex plugin support and a [TypeSafe API key](https://console.typesafe.ai/). TypeSafe usage is billed separately.
 
-Alternatively, launch Codex with `TYPESAFE_API_KEY` in its process environment. Never commit this key.
-
-Start a new Codex chat. Review and trust the plugin hooks through `/hooks` when prompted. No `npm install` is needed.
-
-To update:
-
-```sh
-codex plugin marketplace upgrade jev-reflection
-codex plugin add jev-reflection@jev-reflection
-```
-
-## Data sent to TypeSafe
-
-Scheduled checks send bounded excerpts of user and assistant messages, recent tool inputs and outputs, the working directory, and timing information to `https://api.typesafe.ai/v1/systemone`. The transcript reader examines only the final 256 KiB and excludes system, developer, and reasoning records. State stays in memory; the plugin writes no logs.
-
-Common credential fields and token patterns are redacted, and the configured TypeSafe key is removed from the request body. Redaction is heuristic: other private information in chat or tool output can still be sent. Use the plugin only for tasks whose context you are willing to share with TypeSafe. API requests use your TypeSafe account and its usage limits or charges.
-
-## Check locally
-
-```sh
-npm run check
-```
-
-MIT license.
+**Ask your agent to follow the [installation guide](docs/install.md).** It must ask your permission to share context, save your consent in global rules, and configure tool permissions. Enter the key through a masked field or directly in the configuration file opened in Codex—never in chat.
